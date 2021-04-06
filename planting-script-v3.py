@@ -4,23 +4,52 @@ import datetime
 import board
 import busio
 import RPi.GPIO as GPIO
+import numpy as np
+import serial
+import string
+import pynmea2
 
 # Need to:
-# - Ensure that the IMU is being properly instantiated
 # - Figure out which axes we need for acceleration and angular velocity
 # - Figure out the thresholds
-# - Integrate the GPS locations to record_location function
 
+# Using from IMU:
+# sensor.acceleration
+# sensor.gyro
+
+
+
+
+
+
+# Functions required in the script are all included below
+
+# Returns the latitude and longitude of the GPS
+def get_lat_lng():
+    
+    while True:
+        port="/dev/ttyAMA0"
+        ser=serial.Serial(port, baudrate=9600, timeout=0.5)
+        dataout = pynmea2.NMEAStreamReader()
+        newdata=ser.readline()
+        
+        if newdata[0:6] == b'$GPRMC':
+            newdata = newdata.decode()
+            newmsg=pynmea2.parse(newdata)
+            lat=newmsg.latitude
+            lng=newmsg.longitude
+            gps = [lat,lng]
+            return gps
 
 
 # Function used to record the planting location
 def record_location(date):
     # Need to fix this eventually
-    GPS = [0, 0]
+    GPS = get_lat_lng()
 
     # Followed this tutorial:
     # https://thispointer.com/how-to-append-text-or-lines-to-a-file-in-python/
-    name = str(datetime.date.today()) + ".txt"
+    name = "/home/pi/Assited-Tree-Planting/data/" + str(datetime.date.today()) + ".txt"
 
     # Opens the file
     with open(name, "a+") as file_object:
@@ -33,7 +62,7 @@ def record_location(date):
         if len(data) > 0:
             file_object.write("\n")
 
-        # Creates a comma delimited string of: date-time, longitude, and latitude
+        # Creates a comma delimited string of: date-time, latitude, and longitude
         recording = str(datetime.datetime.time(datetime.datetime.now())) + ", " + str(GPS[0]) + ", " + str(GPS[1])
 
         # Writes the new planting instance to the txt file
@@ -56,10 +85,17 @@ def distance(lat1, lon1, lat2, lon2):
     dLat = lat2*np.pi/180 - lat1*np.pi/180
     dLon = lon2*np.pi/180 - lon1*np.pi/180
     a = np.sin(dLat/2)*np.sin(dLat/2) + np.cos(lat1*np.pi/180)*np.cos(lat2*np.pi/180)*np.sin(dLon/2)*np.sin(dLon/2)
-    c = 2*np.atan2(np.sqrt(a),np.sqrt(1 - a))
+    c = 2*np.arctan2(np.sqrt(a),np.sqrt(1 - a))
     d = R*c
     return d * 1000 # Return value in meters
 
+
+
+
+
+
+
+# Initilization of the script is now below...
 
 # Initialize the IMU
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -69,9 +105,12 @@ sensor = adafruit_bno055.BNO055_I2C(i2c)
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 GPIO.setup(18,GPIO.OUT) # Pin 18
+GPIO.output(18,GPIO.HIGH)
 
 # Initialize GPS location
-GPS = [0,0]
+GPS = get_lat_lng()
+print("GPS init:")
+print(GPS)
 GPS_last = [0,0]
 
 # Initialize the planting density that is wanted (in m)
@@ -88,6 +127,11 @@ timeCheckAV = 0
 # Set x angular velocity thresholds
 angVThreshold = 0
 
+# Finished initialization
+time.sleep(3)
+GPIO.output(18,GPIO.LOW)
+
+
 
 # Loop until off
 while True:
@@ -97,12 +141,12 @@ while True:
 
     # Are we 2m away from our last plant?
     if distance(GPS[0], GPS[1], GPS_last[0], GPS_last[1]) >= density:
-        # Turn LED on to signify ready to plant
-        GPIO.output(18,GPIO.HIGH)
+        # Turn LED off to signify ready to plant
+        GPIO.output(18,GPIO.LOW)
 
     else:
-        # Turn LED off to signify in bad range
-        GPIO.output(18,GPIO.LOW)
+        # Turn LED on to signify in bad range
+        GPIO.output(18,GPIO.HIGH)
 
     # Check if the acceleration is below the initial threshold
     if sensor.acceleration < accLowThreshold:
@@ -144,4 +188,5 @@ while True:
                         plant = True
 
                         break
+
 

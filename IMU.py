@@ -57,18 +57,16 @@ while True:
         counts[3]=counts[3]+1
     #print("Temperature: {} degrees C".format(sensor.temperature))
     
-    print(
-        "Temperature: {} degrees C".format(temperature())
-    )  # Uncomment if using a Raspberry Pi
-    
+    #print("Temperature: {} degrees C".format(temperature()))  # Uncomment if using a Raspberry Pi
     print("Accelerometer (m/s^2): {}".format(acc))
-    print("Magnetometer (microteslas): {}".format(mag))
+    #print("Magnetometer (microteslas): {}".format(mag))
     print("Gyroscope (rad/sec): {}".format(gyro))
-    print("Euler angle: {}".format(sensor.euler))
-    print("Quaternion: {}".format(sensor.quaternion))
-    print("Linear acceleration (m/s^2): {}".format(lin_acc))
-    print("Gravity (m/s^2): {}".format(sensor.gravity))
-    print("Calibration:" , sensor.calibration_status)
-    print(counts)
-    print(time.time()-start)
-    #time.sleep(1/Hz)
+    #print("Euler angle: {}".format(sensor.euler))
+    #print("Quaternion: {}".format(sensor.quaternion))
+    #print("Linear acceleration (m/s^2): {}".format(lin_acc))
+    #print("Gravity (m/s^2): {}".format(sensor.gravity))
+    #print("Calibration:" , sensor.calibration_status)
+    #print(counts)
+    #print(time.time()-start)
+    time.sleep(5)
+    print()
