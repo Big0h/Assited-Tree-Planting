@@ -9,17 +9,9 @@ import serial
 import string
 import pynmea2
 
-# Need to:
-# - Figure out which axes we need for acceleration and angular velocity
-# - Figure out the thresholds
 
-# Using from IMU:
-# sensor.acceleration
-# sensor.gyro
-
-
-
-
+# Initialize the planting density that is wanted (in m)
+density = 5
 
 
 # Functions required in the script are all included below
@@ -111,21 +103,19 @@ GPIO.output(18,GPIO.HIGH)
 while(get_lat_lng() == [0.0, 0.0]):
     continue
 
+# Initialize the last GPS location to nowhere
 GPS_last = [0,0]
 
-# Initialize the planting density that is wanted (in m)
-density = 3
-
 # Set y acceleration low and high thresholds
-accLowThreshold = 0
-accHighThreshold = 0
+accLowThreshold = 5
+accHighThreshold = 20
 
 # Set timing thesholds to check for values over
-timeCheckLowHigh = 0
-timeCheckAV = 0
+timeCheckLowHigh = 1
+timeCheckAV = 2
 
 # Set x angular velocity thresholds
-angVThreshold = 0
+angVThreshold = 1.5
 
 # Finished initialization
 time.sleep(5)
@@ -139,20 +129,21 @@ while True:
     # Has a plant just occured?
     plant = False
 
-    # Are we 2m away from our last plant?
+    # Are we DENSITY meters away from our last plant?
     if distance(GPS[0], GPS[1], GPS_last[0], GPS_last[1]) >= density:
         # Turn LED off to signify ready to plant
         GPIO.output(18,GPIO.LOW)
-
     else:
         # Turn LED on to signify in bad range
         GPIO.output(18,GPIO.HIGH)
 
+
+
     # Check if the acceleration is below the initial threshold
-    if sensor.acceleration < accLowThreshold:
+    if sensor.acceleration[1] < accLowThreshold:
 
         # If the acceleration is below the threshold, loop until it isn't
-        while sensor.acceleration < accLowThreshold:
+        while sensor.acceleration[1] < accLowThreshold:
             continue
 
         # Sets an end time to check for a planting instance until
@@ -166,10 +157,10 @@ while True:
                 break
 
             # Check if the acceleration is above a threshold
-            if sensor.acceleration > accHighThreshold:
+            if sensor.acceleration[1] > accHighThreshold:
                 
                 # If the acceleration is above the threshold, loop until it isn't
-                while sensor.acceleration > accHighThreshold:
+                while sensor.acceleration[1] > accHighThreshold:
                     continue
 
                 # Set a new time end to loop until to check the angular velocity over
@@ -179,14 +170,13 @@ while True:
                 while time.time() < t_end_av:
 
                     # If the angular velocity is above the threshold, a planting instance has occured!
-                    if sensor.gyro > angVThreshold:   
+                    if np.abs(sensor.gyro[0]) > angVThreshold:   
 
                         # Calls on record location to record GPS location
                         GPS_last = record_location(datetime.datetime.now())
 
                         # Sets plant to true to return to top of loop
                         plant = True
-
                         break
 
 
