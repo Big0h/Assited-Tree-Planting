@@ -5,6 +5,10 @@ GPIO.setwarnings(False)
 GPIO.setup(18,GPIO.OUT)
 
 
-GPIO.output(18,GPIO.HIGH)
-time.sleep(5)
-GPIO.output(18,GPIO.LOW)
+t_end = time.time() + 60
+
+while time.time() < t_end:
+    GPIO.output(18,GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(18,GPIO.LOW)
+    time.sleep(0.5)

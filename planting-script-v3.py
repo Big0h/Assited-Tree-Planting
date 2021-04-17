@@ -108,9 +108,9 @@ GPIO.setup(18,GPIO.OUT) # Pin 18
 GPIO.output(18,GPIO.HIGH)
 
 # Initialize GPS location
-GPS = get_lat_lng()
-print("GPS init:")
-print(GPS)
+while(get_lat_lng() == [0.0, 0.0]):
+    continue
+
 GPS_last = [0,0]
 
 # Initialize the planting density that is wanted (in m)
@@ -128,7 +128,7 @@ timeCheckAV = 0
 angVThreshold = 0
 
 # Finished initialization
-time.sleep(3)
+time.sleep(5)
 GPIO.output(18,GPIO.LOW)
 
 
