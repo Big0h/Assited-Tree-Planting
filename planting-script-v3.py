@@ -8,6 +8,12 @@ import numpy as np
 import serial
 import string
 import pynmea2
+import csv
+from threading import Thread
+
+# Run sudo nano /etc/profile
+# sudo python /home/pi/Assited-Tree-Planting/planting-script-v3.py &
+
 
 
 # Initialize the planting density that is wanted (in m)
@@ -16,22 +22,20 @@ density = 5
 
 # Functions required in the script are all included below
 
+
 # Returns the latitude and longitude of the GPS
 def get_lat_lng():
+    with open('/home/pi/Assited-Tree-Planting/last_GPS.txt') as gps_file:
+        gps_reader = csv.reader(gps_file, delimiter=',')
+        GPS = []
+        for row in gps_reader:
+            for x in row:
+                GPS.append(float(x))
     
-    while True:
-        port="/dev/ttyAMA0"
-        ser=serial.Serial(port, baudrate=9600, timeout=0.5)
-        dataout = pynmea2.NMEAStreamReader()
-        newdata=ser.readline()
+    if len(GPS) == 0:
+        GPS = [0.0 ,0.0]
         
-        if newdata[0:6] == b'$GPRMC':
-            newdata = newdata.decode()
-            newmsg=pynmea2.parse(newdata)
-            lat=newmsg.latitude
-            lng=newmsg.longitude
-            gps = [lat,lng]
-            return gps
+    return GPS
 
 
 # Function used to record the planting location
@@ -86,97 +90,136 @@ def distance(lat1, lon1, lat2, lon2):
 
 
 
+def plant_detection():
+    # Initilization of the script is now below...
+    
+    # Initialize the IMU
+    i2c = busio.I2C(board.SCL, board.SDA)
+    sensor = adafruit_bno055.BNO055_I2C(i2c)
 
-# Initilization of the script is now below...
+    # Initialize the LED
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    GPIO.setup(18,GPIO.OUT) # Pin 18
+    GPIO.output(18,GPIO.HIGH)
+    
+    # Initialize the last GPS location to nowhere
+    GPS_last = [0,0]
 
-# Initialize the IMU
-i2c = busio.I2C(board.SCL, board.SDA)
-sensor = adafruit_bno055.BNO055_I2C(i2c)
+    # Set y acceleration low and high thresholds
+    accLowThreshold = 5
+    accHighThreshold = 20
 
-# Initialize the LED
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-GPIO.setup(18,GPIO.OUT) # Pin 18
-GPIO.output(18,GPIO.HIGH)
+    # Set timing thesholds to check for values over
+    timeCheckLowHigh = 1
+    timeCheckAV = 2
 
-# Initialize GPS location
-while(get_lat_lng() == [0.0, 0.0]):
-    continue
+    # Set x angular velocity thresholds
+    angVThreshold = 1.5
 
-# Initialize the last GPS location to nowhere
-GPS_last = [0,0]
+    # Finished initialization
+    time.sleep(5)
+    GPIO.output(18,GPIO.LOW)
 
-# Set y acceleration low and high thresholds
-accLowThreshold = 5
-accHighThreshold = 20
+    # Loop until off
+    while True:
 
-# Set timing thesholds to check for values over
-timeCheckLowHigh = 1
-timeCheckAV = 2
+        # Get the latest GPS data
+        GPS = get_lat_lng()
+        
+        # Initialize GPS location
+        while(GPS == [0.0, 0.0]):
+            GPIO.output(18,GPIO.HIGH)
+            time.sleep(0.25)
+            GPIO.output(18,GPIO.LOW)
+            time.sleep(0.25)
+            GPS = get_lat_lng()
+        
+        print("GPS: " + str(GPS))
+        print("Accelerometer: " + str(sensor.acceleration))
+        print("Gyroscope: " + str(sensor.gyro))
+        print()
 
-# Set x angular velocity thresholds
-angVThreshold = 1.5
-
-# Finished initialization
-time.sleep(5)
-GPIO.output(18,GPIO.LOW)
-
-
-
-# Loop until off
-while True:
-
-    # Has a plant just occured?
-    plant = False
-
-    # Are we DENSITY meters away from our last plant?
-    if distance(GPS[0], GPS[1], GPS_last[0], GPS_last[1]) >= density:
-        # Turn LED off to signify ready to plant
-        GPIO.output(18,GPIO.LOW)
-    else:
-        # Turn LED on to signify in bad range
-        GPIO.output(18,GPIO.HIGH)
+        # Has a plant just occured?
+        plant = False
+        
+        # Are we DENSITY meters away from our last plant?
+        if distance(GPS[0], GPS[1], GPS_last[0], GPS_last[1]) >= density:
+            # Turn LED off to signify ready to plant
+            GPIO.output(18,GPIO.LOW)
+        else:
+            # Turn LED on to signify in bad range
+            GPIO.output(18,GPIO.HIGH)
 
 
 
-    # Check if the acceleration is below the initial threshold
-    if sensor.acceleration[1] < accLowThreshold:
+        # Check if the acceleration is below the initial threshold
+        if sensor.acceleration[1] < accLowThreshold:
 
-        # If the acceleration is below the threshold, loop until it isn't
-        while sensor.acceleration[1] < accLowThreshold:
-            continue
+            # If the acceleration is below the threshold, loop until it isn't
+            while sensor.acceleration[1] < accLowThreshold:
+                continue
 
-        # Sets an end time to check for a planting instance until
-        t_end_lh = time.time() + timeCheckLowHigh
+            # Sets an end time to check for a planting instance until
+            t_end_lh = time.time() + timeCheckLowHigh
 
-        # Loop until the end time
-        while time.time() < t_end_lh:
+            # Loop until the end time
+            while time.time() < t_end_lh:
 
-            # Did a plant just occur?
-            if plant == True:
-                break
+                # Did a plant just occur?
+                if plant == True:
+                    break
 
-            # Check if the acceleration is above a threshold
-            if sensor.acceleration[1] > accHighThreshold:
+                # Check if the acceleration is above a threshold
+                if sensor.acceleration[1] > accHighThreshold:
+                    
+                    # If the acceleration is above the threshold, loop until it isn't
+                    while sensor.acceleration[1] > accHighThreshold:
+                        continue
+
+                    # Set a new time end to loop until to check the angular velocity over
+                    t_end_av = time.time() + timeCheckAV
+
+                    # Loop until the end time
+                    while time.time() < t_end_av:
+
+                        # If the angular velocity is above the threshold, a planting instance has occured!
+                        if np.abs(sensor.gyro[0]) > angVThreshold:   
+
+                            # Calls on record location to record GPS location
+                            GPS_last = record_location(datetime.datetime.now())
+
+                            # Sets plant to true to return to top of loop
+                            plant = True
+                            break
+
+# Constantly updating the last GPS location
+def GPS_latest():
+    while True:
+        port="/dev/ttyAMA0"
+        ser=serial.Serial(port, baudrate=9600, timeout=0.5)
+        dataout = pynmea2.NMEAStreamReader()
+        newdata=ser.readline()
+        
+        if newdata[0:6] == b'$GPRMC':
+            newdata = newdata.decode()
+            newmsg=pynmea2.parse(newdata)
+            lat=newmsg.latitude
+            lng=newmsg.longitude
+            
+            with open("/home/pi/Assited-Tree-Planting/last_GPS.txt", "w+") as file_object:
                 
-                # If the acceleration is above the threshold, loop until it isn't
-                while sensor.acceleration[1] > accHighThreshold:
-                    continue
-
-                # Set a new time end to loop until to check the angular velocity over
-                t_end_av = time.time() + timeCheckAV
-
-                # Loop until the end time
-                while time.time() < t_end_av:
-
-                    # If the angular velocity is above the threshold, a planting instance has occured!
-                    if np.abs(sensor.gyro[0]) > angVThreshold:   
-
-                        # Calls on record location to record GPS location
-                        GPS_last = record_location(datetime.datetime.now())
-
-                        # Sets plant to true to return to top of loop
-                        plant = True
-                        break
+                # Creates a comma delimited string of: date-time, latitude, and longitude
+                GPS = str(lat) + "," + str(lng)
+                
+                # Writes the new planting instance to the txt file
+                file_object.write(GPS)
+                
+                # Closes the file
+                file_object.close()
 
 
+
+# Now for the multi-threading...
+Thread(target = GPS_latest).start() 
+Thread(target = plant_detection).start()
